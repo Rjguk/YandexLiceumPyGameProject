@@ -64,8 +64,6 @@ def generation(shape=20):
 
 
 
-
-
 if __name__ == '__main__':
     pygame.init()
     size = width, height = 1200, 900
