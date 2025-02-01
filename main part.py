@@ -3,7 +3,7 @@ import sys
 import  random
 import numpy as np
 import pygame
-from pygame.display import update
+from pygame.examples.vgrade import timer
 
 from map_generator import generation
 
@@ -13,8 +13,27 @@ real_coord = [0, 0]
 max_pos = [50, 50]
 game_mode = ["None", 0]
 person_positions = []
+rect_of_choice = [0]
 inf_window = [[], []]
+building_place = [[]]
+date_pic = [0]
+resources = {"брёвна" : 100,
+             "торф" : 1,
+             "камни" : 100,
+             "железная руда": 1,
+             "золотая руда": 1,
+             "исследования" : 1,
+             "инструменты": 100,
+             "науч. оборуд.": 100,
+             "еда": 100}
 
+build = [["Дом (позволяет поселить в нём трёх человек)", {"брёвна": 25, "камни": 10}],
+             ["Лесопилка (добывает брёвна)", {"брёвна": 10, "инструменты" : 3, "камни": 10}],
+             ["Карьер (добывает камни и полезные ископаемые)", {"брёвна": 8, "инструменты": 3}],
+             ["Станция по добыче торфа (добывает торф)", {"брёвна": 10, "инструменты": 3}],
+             ["Кузница", {"камни": 30, "брёвна": 20, "инструменты": 6}],
+             ["Посадочная площадка (позволяет торговцам прилетать в поселение)", {"камни": 40}],
+             ["Научный дом (приносит исследования)", {"брёвна": 25, "камни": 10, "науч. оборуд.": 5}],]
 
 
 class Cell(pygame.sprite.Sprite):
@@ -22,7 +41,19 @@ class Cell(pygame.sprite.Sprite):
              "луг": pygame.image.load("pic\\ячейка_луг.png"),
              "лес": pygame.image.load("pic\\ячейка_лес.png"),
              "вода": pygame.image.load("pic\\ячейка_вода.png"),
-             "болото": pygame.image.load("pic\\ячейка_болото.png")}
+             "болото": pygame.image.load("pic\\ячейка_болото.png"),
+             "кузница": pygame.image.load("pic\\ячейка_кузница.png"),
+             "лесопилка": pygame.image.load("pic\\ячейка_лесопилка.png"),
+             "исследовательский дом": pygame.image.load("pic\\ячейка_центр_исследований.png"),
+             "дом": pygame.image.load("pic\\ячейка_дом.png"),
+             "станция по добыче торфа": pygame.image.load("pic\\ячейка_добыча_торфа.png"),
+             "карьер": pygame.image.load("pic\\ячейка_карьер.png"),
+             "площадка для дирижабля": pygame.image.load("pic\\ячейка_площадка.png")}
+
+    all_b = ["дом", "лесопилка", "карьер", "станция по добыче торфа", "кузница",
+             "площадка для дирижабля", "исследовательский дом"]
+
+    all_b_l = ["D", "T", "M", "S", "K", "A", "C"]
 
     def __init__(self, *group, state="пустая", pos_x=0, pos_y=0, rx=0, ry=0):
         super().__init__(*group)
@@ -37,9 +68,16 @@ class Cell(pygame.sprite.Sprite):
         self.rect.y = pos_y
         self.rx = rx
         self.ry = ry
+        self.timer = []
+        self.metal = random.choice(["R", "R", "R", "R" "R", "R", "I", "I", "I", "G"])
+        if self.state == "лес":
+            self.stock = 60
+        elif self.state == "болото":
+            self.stock = 180
+        elif self.state == "луг":
+            self.stock = 60
 
-
-    def update(self, type_ev="", ev_pos=(0, 0), vision=1):
+    def update(self, type_ev="", ev_pos=(0, 0), vision=1, building=0):
         if type_ev == "up":
             self.rect.y += 100
         elif type_ev == "down":
@@ -63,13 +101,57 @@ class Cell(pygame.sprite.Sprite):
                 if game_mode[0] == "Information":
                     if game_mode[1] == 0:
                         game_mode[1] = 1
-                        inf_window[0], inf_window[1] = information_menu(name=self.state, position=(self.rect.x, self.rect.y),
-                                                                        )
+                        inf_window[0], inf_window[1] = information_menu(name=self.state,
+                                                                        position=(self.rect.x, self.rect.y),)
+                if game_mode[0] == "Building":
+                    if game_mode[1] == 0:
+                        game_mode[1] = 1
+                        building_place[0] = [self.ry, self.rx]
+                        inf_window[0], inf_window[1] = building_menu(position=(self.rect.x, self.rect.y),)
         elif type_ev == "fog":
             vis = (vision + 1) * 100
             if ev_pos[0] - vis < self.rect.x < ev_pos[0] + vis and ev_pos[1] - vis < self.rect.y < ev_pos[1] + vis:
                 clear_map[self.ry, self.rx] = 1
                 self.image = Cell.image[self.state]
+        elif type_ev == "building" and building_place[0] == [self.ry, self.rx]:
+            building_res = build[building][-1]
+            if (self.state == "луг" and building in [0, 2, 4, 5 ,5]) or (self.state == "болото" and building == 3)\
+                    or (self.state == "лес" and building == 1):
+                for k in building_res:
+                    if not (k in resources and building_res[k] <= resources[k]):
+                        break
+                else:
+                    for l in building_res:
+                        resources[l] -= building_res[l]
+
+                    self.timer.append([[20, 12, 12, 12, 40, 80, 20][building], building])
+                    print(self.timer)
+        elif type_ev == "next_turn":
+            for p in all_person:
+                if pygame.sprite.collide_mask(self, p):
+                    if self.state == "лесопилка":
+                        resources["брёвна"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
+                    elif self.state == "карьер":
+                        resources["камни"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
+                        if self.metal == "I":
+                            resources["железная руда"] += 1
+                        elif self.metal == "G":
+                            resources["золотая руда"] += 1
+                    elif self.state == "станция по добыче торфа":
+                        resources["торф"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
+                    elif self.state == "исследовательский дом":
+                        resources["исследования"] += 1 + p.scince // 2 + max(p.scince, 2) % 2
+
+                    break
+            for t in range(len(self.timer)):
+                self.timer[t][0] -= 1
+                if self.timer[t][0] == 0:
+                    self.state = self.all_b[self.timer[t][1]]
+                    b = list(text_map[self.ry])
+                    b[self.rx] = self.all_b_l[self.timer[t][1]]
+                    text_map[self.ry] = b
+                    self.image = Cell.image[self.state]
+                    del self.timer[t]
 
 
 
@@ -93,6 +175,14 @@ class Person(pygame.sprite.Sprite):
         self.vision = characteristics["зрение"]
         self.endurance = characteristics["выносливость"]
         self.actions = self.endurance
+        self.saturation = characteristics["сытость"]
+        self.mood = characteristics["настроение"]
+        self.mhealth = characteristics["максимальное здоровье"]
+        self.health = characteristics["здоровье"]
+        self.science = characteristics["ум"]
+        self.craft = characteristics["ремесло"]
+        self.strength = characteristics["сила"]
+
         all_cell.update(type_ev="fog", ev_pos=(self.rect.x - 27, self.rect.y - 17), vision=self.vision)
 
     def wrighting(self, x=0, y=0,):
@@ -127,7 +217,12 @@ class Person(pygame.sprite.Sprite):
                 if game_mode[0] == "Information":
                     game_mode[1] = 1
                     inf_window[0], inf_window[1] = information_menu(name="Человек", position=(self.rect.x, self.rect.y),
-                                                                    выносливость=self.endurance, зрение=self.vision,
+                                                                    выносливость=self.endurance, сила=self.strength,
+                                                                    зрение=self.vision,
+                                                                    ремесло=self.craft, ум=self.science,
+                                                                    здоровье=str(self.health) + "/" + str(self.mhealth),
+                                                                    настроение=str(self.mood * 20) + "%",
+                                                                    сытость=self.saturation,
                                                                     действия=self.actions)
 
         elif type_ev == "move":
@@ -138,8 +233,21 @@ class Person(pygame.sprite.Sprite):
                     self.actions -= 1
                 self.mode = "None"
                 game_mode[0] = "None"
+        elif type_ev == "next_day":
+            if resources["еда"] > 1:
+                resources["еда"] -= 2
+                self.saturation = 10
+            elif resources["еда"] > 0:
+                resources["еда"] -= 1
+                self.saturation -= 1
+            else:
+                self.saturation -= 2
+            if self.saturation < 1:
+                self.kill()
         elif type_ev == "next_turn":
-            self.actions = self.endurance
+            self.actions = max(0, self.endurance - (2 - (self.saturation + 1) // 5))
+
+
 
 
 
@@ -161,6 +269,7 @@ class Bolder(pygame.sprite.Sprite):
 
 class GameButton(pygame.sprite.Sprite):
     image = {"информация": pygame.image.load("pic\\кнопка_информация.png"),
+             "строительство": pygame.image.load("pic\\кнопка_строительства.png"),
              }
     def __init__(self, *group, state="информация", pos_x=1100, pos_y=100):
         super().__init__(*group)
@@ -187,12 +296,53 @@ class GameButton(pygame.sprite.Sprite):
                 else:
                     game_mode[0] = "None"
                     game_mode[1] = 0
+        if self.state == "строительство":
+            if type_ev == "click":
+                if self.rect.collidepoint(pygame.mouse.get_pos()):
+                    if game_mode[0] != "Building":
+                        game_mode[0] = "Building"
+                    else:
+                        game_mode[0] = "None"
+                        game_mode[1] = 0
+            if type_ev == "building":
+                if game_mode[0] != "Building":
+                    game_mode[0] = "Building"
+                else:
+                    game_mode[0] = "None"
+                    game_mode[1] = 0
+
+
+
+class DateInterface(pygame.sprite.Sprite):
+    image = {"1": pygame.image.load("pic\\ход1.png"),
+             "2": pygame.image.load("pic\\ход2.png"),
+             "3": pygame.image.load("pic\\ход3.png"),
+             "4": pygame.image.load("pic\\ход4.png"),
+             }
+
+    def __init__(self, *group, state="1"):
+        super().__init__(*group)
+        self.state = state
+        self.image = DateInterface.image[self.state]
+        self.rect = self.image.get_rect()
+        self.rect.x = 1051
+        self.rect.y = 0
+
+    def update(self, type_ev="next_turn"):
+        if type_ev == "next_turn":
+            self.state = str(turn)
+            self.image = DateInterface.image[self.state]
+            font = pygame.font.SysFont(None, 30)
+            date_pic[0] = font.render(".".join(list(map(str, date))), True, (0, 0, 0))
+
+
 
 
 
 def world_generation(size):
     stop = 1
     text_map_func = []
+    np_metal_map = []
     while stop != 0:
         stop = 1
         np_map = generation(shape=size)
@@ -200,6 +350,18 @@ def world_generation(size):
             test = []
             for i in range(size):
                 test.append(np_map[i][j])
+            if len(set(test)) == 1:
+                stop = 2
+                break
+        if stop != 2:
+            stop = 0
+    while stop != 0:
+        stop = 1
+        np_metal_map = generation(shape=size)
+        for j in range(size):
+            test = []
+            for i in range(size):
+                test.append(np_metal_map[i][j])
             if len(set(test)) == 1:
                 stop = 2
                 break
@@ -224,25 +386,32 @@ def world_generation(size):
             if num > 2:
                 text_map_func[i].append("B")
                 Cell(all_cell, pos_x=x, pos_y=y, state="болото", rx=j, ry=i)
+
+
             j += 1
         i += 1
-    char = {
-        "зрение" : 3,
-        "выносливость" : 2
-    }
-    Person(all_person, characteristics=char)
-    char = {
-        "зрение": 2,
-        "выносливость": 3
-    }
-    Person(all_person, pos_x=227, pos_y=217, characteristics=char)
+    for p in range(5):
+        char = {
+            "зрение": random.randint(1, 4),
+            "выносливость": random.randint(1, 4),
+            "сытость": random.randint(7, 10),
+            "максимальное здоровье": 5,
+            "здоровье": 5,
+            "настроение": 5,
+            "ремесло": random.randint(1, 3),
+            "сила": random.randint(1, 3),
+            "ум": random.randint(0, 3)
+        }
+        Person(all_person, characteristics=char, pos_y=117 + p * 100)
     Bolder(all_inter)
     Bolder(all_inter, position="боковая")
     GameButton(all_inter)
+    GameButton(all_inter, state="строительство", pos_x=1100, pos_y=200)
+    DateInterface(all_inter, state="1")
 
     for i in text_map_func:
         print("".join(i))
-    return text_map_func
+    return text_map_func, np_metal_map
 
 def information_menu(name="", position=(300, 300), **inf):
     window_x = 300
@@ -268,6 +437,35 @@ def information_menu(name="", position=(300, 300), **inf):
         pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
     return  new_screen, pos_new_screen
 
+def building_menu(position=(300, 300)):
+    window_x = 550
+    window_y = 350
+    if window_x + position[0] > 1200:
+        new_position_x = position[0] - window_x
+    else:
+        new_position_x = position[0]
+    if window_y + position[1] > 900:
+        new_position_y = position[1] - window_y
+    else:
+        new_position_y = position[1]
+    font = pygame.font.SysFont(None, 20)
+    pos_new_screen = [(new_position_x, new_position_y), [new_position_x + 10, new_position_y + 50],
+                      (new_position_x + 10, new_position_y + 10)]
+    new_screen = [pygame.Surface((window_x, window_y)),  pygame.Surface((535, 20)),
+                  font.render("Строения", True, (0, 0, 0))]
+    pygame.draw.rect(new_screen[0], (139, 139, 139), (0, 0, window_x, window_y))
+    pygame.draw.rect(new_screen[0], (57, 57, 57), (0, 0, window_x, window_y), 5)
+    pygame.draw.rect(new_screen[1], (255, 255, 255), (0, 0, 535, 20))
+    rect_of_choice[0] = pos_new_screen[1][1]
+    #bahnschrift semibold
+    for el in build:
+        res_line = ""
+        for i in el[1]:
+            res_line += i + " " + str(el[1][i]) + "  "
+        new_screen.append(font.render(el[0] + ": " + res_line, True, (0, 0, 0)))
+        pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
+    return  new_screen, pos_new_screen
+
 
 if __name__ == '__main__':
     pygame.init()
@@ -277,13 +475,14 @@ if __name__ == '__main__':
     all_cell = pygame.sprite.Group()
     all_person = pygame.sprite.Group()
     all_inter = pygame.sprite.Group()
-    text_map = world_generation(max_pos[0])
+    text_map, text_metal = world_generation(max_pos[0])
     turn = 1
+    date = [1, 1, 1834]
+    all_inter.update()
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
-                print(real_coord)
                 if event.key == pygame.K_w:
                     if real_coord[1] + height // 100 - 1 < max_pos[1]:
                         all_cell.update(type_ev="up")
@@ -305,18 +504,48 @@ if __name__ == '__main__':
                         all_person.update(type_ev="left")
                         real_coord[0] -= 1
                 if event.key == pygame.K_SPACE:
+                    if turn < 4:
+                        turn += 1
+                    else:
+                        all_cell.update(type_ev="next_day")
+                        all_person.update(type_ev="next_day")
+                        turn = 1
+                        if date[0] < 30:
+                            date[0] += 1
+                        else:
+                            date[0] = 1
+                            if date[1] < 12:
+                                date[1] += 1
+                            else:
+                                date[1] = 1
+                                date[2] += 1
                     all_cell.update(type_ev="next_turn")
                     all_person.update(type_ev="next_turn")
+                    all_inter.update(type_ev="next_turn")
                 if event.key == pygame.K_q:
                     all_inter.update(type_ev="information")
-                print(real_coord)
+                if event.key == pygame.K_b:
+                    all_inter.update(type_ev="building")
+                if game_mode == ["Building", 1]:
+                    if event.key == pygame.K_DOWN:
+                        if window_pos[1][1] + 40 < rect_of_choice[0] + 280:
+                            window_pos[1][1] += 40
+                        else:
+                            window_pos[1][1] -= 240
+                    if event.key == pygame.K_UP:
+                        if window_pos[1][1] - 40 >= rect_of_choice[0]:
+                            window_pos[1][1] -= 40
+                    if event.key == pygame.K_RETURN:
+                        all_cell.update(type_ev="building", building=(window_pos[1][1] - rect_of_choice[0]) // 40)
+                        game_mode = ["None", 0]
+                        print(resources)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 all_person.update(type_ev="click")
                 all_cell.update(type_ev="click")
                 all_inter.update(type_ev="click")
             if event.type == pygame.QUIT:
                 running = False
-            all_cell.update(event)
+
 
         # отрисовка и изменение свойств объектов
         # ...
@@ -324,12 +553,18 @@ if __name__ == '__main__':
         all_person.draw(screen)
         all_inter.draw(screen)
         if game_mode == ["Information", 1]:
-
             window, window_pos = inf_window[0], inf_window[1]
             j = 0
             for i in window:
                 screen.blit(i, window_pos[j])
                 j += 1
+        elif game_mode == ["Building", 1]:
+            window, window_pos = inf_window[0], inf_window[1]
+            j = 0
+            for i in window:
+                screen.blit(i, window_pos[j])
+                j += 1
+        screen.blit(date_pic[0], (1071, 20))
         # обновление экрана
         pygame.display.flip()
     pygame.quit()
