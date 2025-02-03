@@ -10,22 +10,30 @@ from map_generator import generation
 
 
 real_coord = [0, 0]
-max_pos = [50, 50]
+max_pos = [100, 100]
 game_mode = ["None", 0]
 person_positions = []
 rect_of_choice = [0]
 inf_window = [[], []]
 building_place = [[]]
 date_pic = [0]
+num_text = []
+nums = []
+
 resources = {"брёвна" : 100,
-             "торф" : 1,
+             "торф" : 100,
              "камни" : 100,
-             "железная руда": 1,
-             "золотая руда": 1,
-             "исследования" : 1,
+             "железная руда": 100,
+             "железный слиток": 0,
+             "золотая руда": 0,
+             "золотой слиток": 0,
+             "золотое изделие": 0,
+             "золотая бижутерия": 0,
+             "ружьё": 0,
+             "еда": 1000,
              "инструменты": 100,
              "науч. оборуд.": 100,
-             "еда": 100}
+             "исследования" : 1,}
 
 build = [["Дом (позволяет поселить в нём трёх человек)", {"брёвна": 25, "камни": 10}],
              ["Лесопилка (добывает брёвна)", {"брёвна": 10, "инструменты" : 3, "камни": 10}],
@@ -35,6 +43,13 @@ build = [["Дом (позволяет поселить в нём трёх чел
              ["Посадочная площадка (позволяет торговцам прилетать в поселение)", {"камни": 40}],
              ["Научный дом (приносит исследования)", {"брёвна": 25, "камни": 10, "науч. оборуд.": 5}],]
 
+forge = {"инструменты": [3, "железный слиток"],
+         "железный слиток": [1, "железная руда"],
+         "золотой слиток": [1, "золотая руда"],
+         "золотое изделие": [3, "золотой слиток"],
+         "золотая бижутерия": [1, "золотой слиток"],
+         "ружьё": [6, "железный слиток"],
+         }
 
 class Cell(pygame.sprite.Sprite):
     image = {"пустая": pygame.image.load("pic\\ячейка_пустая.png"),
@@ -66,9 +81,12 @@ class Cell(pygame.sprite.Sprite):
         self.mask = pygame.mask.from_surface(self.image)
         self.rect.x = pos_x
         self.rect.y = pos_y
+        self.selected = 0
         self.rx = rx
         self.ry = ry
         self.timer = []
+        self.task = []
+        self.fuel = "брёвна"
         self.metal = random.choice(["R", "R", "R", "R" "R", "R", "I", "I", "I", "G"])
         if self.state == "лес":
             self.stock = 60
@@ -77,7 +95,7 @@ class Cell(pygame.sprite.Sprite):
         elif self.state == "луг":
             self.stock = 60
 
-    def update(self, type_ev="", ev_pos=(0, 0), vision=1, building=0):
+    def update(self, type_ev="", ev_pos=(0, 0), vision=1, building=0, forge_task=None):
         if type_ev == "up":
             self.rect.y += 100
         elif type_ev == "down":
@@ -88,6 +106,11 @@ class Cell(pygame.sprite.Sprite):
             self.rect.x += 100
         elif type_ev == "click":
             if self.rect.collidepoint(pygame.mouse.get_pos()):
+                if game_mode[0] == "None" and self.state == "кузница":
+                    game_mode[0] = "Forge"
+                    self.selected = 1
+                    inf_window[0], inf_window[1] = forge_menu(forge, fuel=self.fuel)
+                    print(self.task)
                 if game_mode[0] == "Move":
                     if game_mode[1] == 1:
                         if self.state != "вода" and self.rect.y != 0 and self.rect.x != 1100:
@@ -100,6 +123,7 @@ class Cell(pygame.sprite.Sprite):
                     print(self.state)
                 if game_mode[0] == "Information":
                     if game_mode[1] == 0:
+                        self.selected = 1
                         game_mode[1] = 1
                         inf_window[0], inf_window[1] = information_menu(name=self.state,
                                                                         position=(self.rect.x, self.rect.y),)
@@ -125,7 +149,6 @@ class Cell(pygame.sprite.Sprite):
                         resources[l] -= building_res[l]
 
                     self.timer.append([[20, 12, 12, 12, 40, 80, 20][building], building])
-                    print(self.timer)
         elif type_ev == "next_turn":
             for p in all_person:
                 if pygame.sprite.collide_mask(self, p):
@@ -141,7 +164,19 @@ class Cell(pygame.sprite.Sprite):
                         resources["торф"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
                     elif self.state == "исследовательский дом":
                         resources["исследования"] += 1 + p.scince // 2 + max(p.scince, 2) % 2
+                    elif self.state == "кузница":
+                        if self.task:
+                            need_res = forge[self.task[0]]
+                            if (need_res[0]  <= resources[need_res[1]] and
+                                    ["торф", "0", "брёвна"].index(self.fuel) + 1 <= resources[self.fuel]):
+                                print(need_res[0])
+                                print(need_res[1])
+                                resources[need_res[1]] -= need_res[0]
 
+                                resources[self.fuel] -= ["торф", "0", "брёвна"].index(self.fuel) + 1
+                                resources[self.task[0]] += 1
+                                del self.task[0]
+                                print("end")
                     break
             for t in range(len(self.timer)):
                 self.timer[t][0] -= 1
@@ -152,6 +187,22 @@ class Cell(pygame.sprite.Sprite):
                     text_map[self.ry] = b
                     self.image = Cell.image[self.state]
                     del self.timer[t]
+        elif type_ev == "dsel":
+            self.selected = 0
+        elif type_ev == "update_inf":
+            if self.selected == 1:
+                inf_window[0], inf_window[1] = information_menu(name=self.state,
+                                                                position=(self.rect.x, self.rect.y), )
+        elif type_ev == "forge" and self.state == "кузница" and self.selected == 1:
+            for f in range(forge_task[1]):
+                self.task.append(list(forge)[forge_task[0]])
+        elif type_ev == "update_fuel":
+            if self.selected == 1:
+                if self.fuel == "брёвна":
+                    self.fuel = "торф"
+                else:
+                    self.fuel = "брёвна"
+                inf_window[0], inf_window[1] = forge_menu(forge, fuel=self.fuel)
 
 
 
@@ -171,6 +222,7 @@ class Person(pygame.sprite.Sprite):
         self.rect.x = pos_x
         self.rect.y = pos_y
         self.mode = "None"
+        self.selected = 0
         person_positions.append((self.rect.x, self.rect.y))
         self.vision = characteristics["зрение"]
         self.endurance = characteristics["выносливость"]
@@ -215,6 +267,7 @@ class Person(pygame.sprite.Sprite):
                         game_mode[0] = "Move"
                         self.mode = "Move"
                 if game_mode[0] == "Information":
+                    self.selected = 1
                     game_mode[1] = 1
                     inf_window[0], inf_window[1] = information_menu(name="Человек", position=(self.rect.x, self.rect.y),
                                                                     выносливость=self.endurance, сила=self.strength,
@@ -246,6 +299,18 @@ class Person(pygame.sprite.Sprite):
                 self.kill()
         elif type_ev == "next_turn":
             self.actions = max(0, self.endurance - (2 - (self.saturation + 1) // 5))
+        elif type_ev == "dsel":
+            self.selected = 0
+        elif type_ev == "update_inf":
+            if self.selected == 1:
+                inf_window[0], inf_window[1] = information_menu(name="Человек", position=(self.rect.x, self.rect.y),
+                                                                выносливость=self.endurance, сила=self.strength,
+                                                                зрение=self.vision,
+                                                                ремесло=self.craft, ум=self.science,
+                                                                здоровье=str(self.health) + "/" + str(self.mhealth),
+                                                                настроение=str(self.mood * 20) + "%",
+                                                                сытость=self.saturation,
+                                                                действия=self.actions)
 
 
 
@@ -270,6 +335,7 @@ class Bolder(pygame.sprite.Sprite):
 class GameButton(pygame.sprite.Sprite):
     image = {"информация": pygame.image.load("pic\\кнопка_информация.png"),
              "строительство": pygame.image.load("pic\\кнопка_строительства.png"),
+             "ресурсы": pygame.image.load("pic\\кнопка_ресурсы.png"),
              }
     def __init__(self, *group, state="информация", pos_x=1100, pos_y=100):
         super().__init__(*group)
@@ -290,12 +356,16 @@ class GameButton(pygame.sprite.Sprite):
                     else:
                         game_mode[0] = "None"
                         game_mode[1] = 0
+                        all_cell.update(type_ev="dsel")
+                        all_person.update(type_ev="dsel")
             if type_ev == "information":
                 if game_mode[0] != "Information":
                     game_mode[0] = "Information"
                 else:
                     game_mode[0] = "None"
                     game_mode[1] = 0
+                    all_cell.update(type_ev="dsel")
+                    all_person.update(type_ev="dsel")
         if self.state == "строительство":
             if type_ev == "click":
                 if self.rect.collidepoint(pygame.mouse.get_pos()):
@@ -304,12 +374,33 @@ class GameButton(pygame.sprite.Sprite):
                     else:
                         game_mode[0] = "None"
                         game_mode[1] = 0
+
             if type_ev == "building":
                 if game_mode[0] != "Building":
                     game_mode[0] = "Building"
                 else:
                     game_mode[0] = "None"
                     game_mode[1] = 0
+        if self.state == "ресурсы":
+            if type_ev == "click":
+                if self.rect.collidepoint(pygame.mouse.get_pos()):
+                    if game_mode[0] != "Resources":
+                        game_mode[0] = "Resources"
+                        inf_window[0], inf_window[1] = resources_menu(resources)
+
+                    else:
+                        game_mode[0] = "None"
+                        game_mode[1] = 0
+            if type_ev == "resources":
+                if game_mode[0] != "Resources":
+                    game_mode[0] = "Resources"
+                    inf_window[0], inf_window[1] = resources_menu(resources)
+                else:
+
+                    game_mode[0] = "None"
+                    game_mode[1] = 0
+            if type_ev == "update_inf":
+                inf_window[0], inf_window[1] = resources_menu(resources)
 
 
 
@@ -334,8 +425,6 @@ class DateInterface(pygame.sprite.Sprite):
             self.image = DateInterface.image[self.state]
             font = pygame.font.SysFont(None, 30)
             date_pic[0] = font.render(".".join(list(map(str, date))), True, (0, 0, 0))
-
-
 
 
 
@@ -407,11 +496,13 @@ def world_generation(size):
     Bolder(all_inter, position="боковая")
     GameButton(all_inter)
     GameButton(all_inter, state="строительство", pos_x=1100, pos_y=200)
+    GameButton(all_inter, state="ресурсы", pos_x=1100, pos_y=300)
     DateInterface(all_inter, state="1")
 
     for i in text_map_func:
         print("".join(i))
     return text_map_func, np_metal_map
+
 
 def information_menu(name="", position=(300, 300), **inf):
     window_x = 300
@@ -436,6 +527,7 @@ def information_menu(name="", position=(300, 300), **inf):
         new_screen.append(font.render(str(el) + ":   " + str(inf[el]), True, (0, 0, 0)))
         pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
     return  new_screen, pos_new_screen
+
 
 def building_menu(position=(300, 300)):
     window_x = 550
@@ -467,10 +559,90 @@ def building_menu(position=(300, 300)):
     return  new_screen, pos_new_screen
 
 
+def resources_menu(inf):
+    window_x = 300
+    window_y = (len(inf) + 1) * 40
+    for i in inf:
+        if inf[i] == 0:
+            window_y -= 40
+    position_x = 0
+    position_y = 100
+
+    pos_new_screen = [(position_x, position_y), (position_x + 10, position_y + 10)]
+    new_screen = [pygame.Surface((window_x, window_y))]
+    pygame.draw.rect(new_screen[0], (139, 139, 139), (0, 0, window_x, window_y))
+    pygame.draw.rect(new_screen[0], (57, 57, 57), (0, 0, window_x, window_y), 5)
+    #bahnschrift semibold
+    font = pygame.font.SysFont(None, 31)
+    new_screen.append(font.render("Склад:", True, (0, 0, 0)))
+    for el in inf:
+        if inf[el] != 0:
+            new_screen.append(font.render(str(el) + ":   " + str(inf[el]), True, (0, 0, 0)))
+            pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
+    return  new_screen, pos_new_screen
+
+
+def forge_menu(inf, fuel="брёвна"):
+    window_x = 300
+    window_y = (len(inf) + 2) * 40
+    position_x = 0
+    position_y = 100
+    font = pygame.font.SysFont(None, 20)
+    pos_new_screen = [(position_x, position_y), [position_x + 10, position_y + 50],
+                      (position_x + 10, position_y + 10)]
+    new_screen = [pygame.Surface((window_x, window_y)), pygame.Surface((280, 20)),
+                  font.render(fuel, True, (0, 0, 0))]
+    pygame.draw.rect(new_screen[0], (139, 139, 139), (0, 0, window_x, window_y))
+    pygame.draw.rect(new_screen[0], (57, 57, 57), (0, 0, window_x, window_y), 5)
+    pygame.draw.rect(new_screen[1], (255, 255, 255), (0, 0, 280, 20))
+    rect_of_choice[0] = pos_new_screen[1][1]
+    # bahnschrift semibold
+    for el in forge:
+        res_line = el + ": " + str(forge[el][0]) + " " + forge[el][1]
+        new_screen.append(font.render(res_line, True, (0, 0, 0)))
+        pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
+    return new_screen, pos_new_screen
+
+
+def number_input(key=None):
+    if len(num_text) < 10:
+        if key == pygame.K_1:
+            num_text.append("1")
+        elif key == pygame.K_2:
+            num_text.append("2")
+        elif key == pygame.K_3:
+            num_text.append("3")
+        elif key == pygame.K_4:
+            num_text.append("4")
+        elif key == pygame.K_5:
+            num_text.append("5")
+        elif key == pygame.K_6:
+            num_text.append("6")
+        elif key == pygame.K_7:
+            num_text.append("7")
+        elif key == pygame.K_8:
+            num_text.append("8")
+        elif key == pygame.K_9:
+            num_text.append("9")
+        elif key == pygame.K_0:
+            num_text.append("0")
+    if key == pygame.K_BACKSPACE:
+        if num_text:
+            del num_text[-1]
+    font = pygame.font.SysFont(None, 21)
+    if nums:
+        nums[0] = font.render("".join(num_text), True, (0, 0, 0))
+    else:
+        nums.append(font.render("".join(num_text), True, (0, 0, 0)))
+
 if __name__ == '__main__':
     pygame.init()
     size = width, height = 1200, 900
     screen = pygame.display.set_mode(size)
+    screen.fill((190, 180, 145))
+    font = pygame.font.SysFont("times new roman", 40)
+    screen.blit(font.render("Загрузка", True, (0, 0, 0)), (500, 450))
+    pygame.display.flip()
     clear_map = np.zeros(size)
     all_cell = pygame.sprite.Group()
     all_person = pygame.sprite.Group()
@@ -504,41 +676,65 @@ if __name__ == '__main__':
                         all_person.update(type_ev="left")
                         real_coord[0] -= 1
                 if event.key == pygame.K_SPACE:
-                    if turn < 4:
-                        turn += 1
-                    else:
-                        all_cell.update(type_ev="next_day")
-                        all_person.update(type_ev="next_day")
-                        turn = 1
-                        if date[0] < 30:
-                            date[0] += 1
+                    if game_mode[0] != "Forge":
+                        if turn < 4:
+                            turn += 1
                         else:
-                            date[0] = 1
-                            if date[1] < 12:
-                                date[1] += 1
+                            all_cell.update(type_ev="next_day")
+                            all_person.update(type_ev="next_day")
+                            turn = 1
+                            if date[0] < 30:
+                                date[0] += 1
                             else:
-                                date[1] = 1
-                                date[2] += 1
-                    all_cell.update(type_ev="next_turn")
-                    all_person.update(type_ev="next_turn")
-                    all_inter.update(type_ev="next_turn")
+                                date[0] = 1
+                                if date[1] < 12:
+                                    date[1] += 1
+                                else:
+                                    date[1] = 1
+                                    date[2] += 1
+                        all_cell.update(type_ev="next_turn")
+                        all_person.update(type_ev="next_turn")
+                        all_inter.update(type_ev="next_turn")
+                        if game_mode == ["Information", 1]:
+                            all_cell.update(type_ev="update_inf")
+                            all_person.update(type_ev="update_inf")
+                        if game_mode[0] == "Resources":
+                            all_inter.update(type_ev="update_inf")
+                    else:
+                        game_mode[0] = "None"
+                        all_cell.update(type_ev="dsel")
                 if event.key == pygame.K_q:
                     all_inter.update(type_ev="information")
                 if event.key == pygame.K_b:
                     all_inter.update(type_ev="building")
-                if game_mode == ["Building", 1]:
+                if event.key == pygame.K_r:
+                    all_inter.update(type_ev="resources")
+                if game_mode == ["Building", 1] or game_mode[0] == "Forge":
+                    max_len = len(inf_window[0]) - 3
                     if event.key == pygame.K_DOWN:
-                        if window_pos[1][1] + 40 < rect_of_choice[0] + 280:
+                        if window_pos[1][1] + 40 < rect_of_choice[0] + max_len * 40:
                             window_pos[1][1] += 40
                         else:
-                            window_pos[1][1] -= 240
+                            window_pos[1][1] -= (max_len - 1) * 40
                     if event.key == pygame.K_UP:
                         if window_pos[1][1] - 40 >= rect_of_choice[0]:
                             window_pos[1][1] -= 40
+                        else:
+                            window_pos[1][1] += (max_len - 1) * 40
                     if event.key == pygame.K_RETURN:
-                        all_cell.update(type_ev="building", building=(window_pos[1][1] - rect_of_choice[0]) // 40)
+                        if game_mode == ["Building", 1]:
+                            all_cell.update(type_ev="building", building=(window_pos[1][1] - rect_of_choice[0]) // 40)
+                        else:
+                            if num_text:
+                                all_cell.update(type_ev="forge",
+                                                forge_task=[(window_pos[1][1] - rect_of_choice[0]) // 40,
+                                                            int("".join(num_text))])
                         game_mode = ["None", 0]
-                        print(resources)
+                if game_mode[0] == "Forge":
+                    number_input(event.key)
+                    if event.key == pygame.K_f:
+                        all_cell.update(type_ev="update_fuel")
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 all_person.update(type_ev="click")
                 all_cell.update(type_ev="click")
@@ -564,6 +760,23 @@ if __name__ == '__main__':
             for i in window:
                 screen.blit(i, window_pos[j])
                 j += 1
+        elif game_mode[0] == "Resources":
+            window, window_pos = inf_window[0], inf_window[1]
+            j = 0
+            for i in window:
+                screen.blit(i, window_pos[j])
+                j += 1
+        elif game_mode[0] == "Forge":
+            window, window_pos = inf_window[0], inf_window[1]
+            j = 0
+            for i in window:
+                screen.blit(i, window_pos[j])
+                j += 1
+            num_x, num_y = window_pos[-1][0], window_pos[-1][1] + 40
+            if nums:
+                screen.blit(nums[0], (num_x, num_y))
+
+
         screen.blit(date_pic[0], (1071, 20))
         # обновление экрана
         pygame.display.flip()
