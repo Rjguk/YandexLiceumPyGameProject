@@ -3,14 +3,12 @@ import sys
 import  random
 import numpy as np
 import pygame
-from pygame.examples.vgrade import timer
-
 from map_generator import generation
-
+from name_generator import name_generation
 
 
 real_coord = [0, 0]
-max_pos = [100, 100]
+max_pos = [50, 50]
 game_mode = ["None", 0]
 person_positions = []
 rect_of_choice = [0]
@@ -19,6 +17,11 @@ building_place = [[]]
 date_pic = [0]
 num_text = []
 nums = []
+cost = []
+window_pos = []
+places = [0]
+is_trader = [0]
+landing_pos = [-1, -1]
 
 resources = {"брёвна" : 100,
              "торф" : 100,
@@ -32,7 +35,7 @@ resources = {"брёвна" : 100,
              "ружьё": 0,
              "еда": 1000,
              "инструменты": 100,
-             "науч. оборуд.": 100,
+             "науч. оборуд.": 1,
              "исследования" : 1,}
 
 build = [["Дом (позволяет поселить в нём трёх человек)", {"брёвна": 25, "камни": 10}],
@@ -51,6 +54,21 @@ forge = {"инструменты": [3, "железный слиток"],
          "ружьё": [6, "железный слиток"],
          }
 
+trade = {"брёвна" : 10,
+         "торф" : 5,
+         "железный слиток": 20,
+         "золотой слиток": 25,
+         "золотое изделие": 90,
+         "золотая бижутерия": 30,
+         "ружьё": 100,
+         "еда": 1,
+         "инструменты": 60,
+         "науч. оборуд.": 200,
+         }
+
+trade_f = {}
+trade_s = {}
+
 class Cell(pygame.sprite.Sprite):
     image = {"пустая": pygame.image.load("pic\\ячейка_пустая.png"),
              "луг": pygame.image.load("pic\\ячейка_луг.png"),
@@ -63,7 +81,8 @@ class Cell(pygame.sprite.Sprite):
              "дом": pygame.image.load("pic\\ячейка_дом.png"),
              "станция по добыче торфа": pygame.image.load("pic\\ячейка_добыча_торфа.png"),
              "карьер": pygame.image.load("pic\\ячейка_карьер.png"),
-             "площадка для дирижабля": pygame.image.load("pic\\ячейка_площадка.png")}
+             "площадка для дирижабля": pygame.image.load("pic\\ячейка_площадка.png"),
+             "стройка": pygame.image.load("pic\\ячейка_стройка.png")}
 
     all_b = ["дом", "лесопилка", "карьер", "станция по добыче торфа", "кузница",
              "площадка для дирижабля", "исследовательский дом"]
@@ -87,6 +106,7 @@ class Cell(pygame.sprite.Sprite):
         self.timer = []
         self.task = []
         self.fuel = "брёвна"
+        self.stock = 0
         self.metal = random.choice(["R", "R", "R", "R" "R", "R", "I", "I", "I", "G"])
         if self.state == "лес":
             self.stock = 60
@@ -110,7 +130,6 @@ class Cell(pygame.sprite.Sprite):
                     game_mode[0] = "Forge"
                     self.selected = 1
                     inf_window[0], inf_window[1] = forge_menu(forge, fuel=self.fuel)
-                    print(self.task)
                 if game_mode[0] == "Move":
                     if game_mode[1] == 1:
                         if self.state != "вода" and self.rect.y != 0 and self.rect.x != 1100:
@@ -125,8 +144,13 @@ class Cell(pygame.sprite.Sprite):
                     if game_mode[1] == 0:
                         self.selected = 1
                         game_mode[1] = 1
-                        inf_window[0], inf_window[1] = information_menu(name=self.state,
-                                                                        position=(self.rect.x, self.rect.y),)
+                        if self.state == "стройка":
+                            inf_window[0], inf_window[1] = information_menu(name=self.state,
+                                                                            осталось=self.timer[0][0],
+                                                                            position=(self.rect.x, self.rect.y),)
+                        else:
+                            inf_window[0], inf_window[1] = information_menu(name=self.state,
+                                                                            position=(self.rect.x, self.rect.y), )
                 if game_mode[0] == "Building":
                     if game_mode[1] == 0:
                         game_mode[1] = 1
@@ -147,6 +171,9 @@ class Cell(pygame.sprite.Sprite):
                 else:
                     for l in building_res:
                         resources[l] -= building_res[l]
+                        self.state = "стройка"
+                        self.image = Cell.image[self.state]
+
 
                     self.timer.append([[20, 12, 12, 12, 40, 80, 20][building], building])
         elif type_ev == "next_turn":
@@ -154,16 +181,21 @@ class Cell(pygame.sprite.Sprite):
                 if pygame.sprite.collide_mask(self, p):
                     if self.state == "лесопилка":
                         resources["брёвна"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
-                    elif self.state == "карьер":
+                    elif self.state == "карьер" and self.stock > 1:
                         resources["камни"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
                         if self.metal == "I":
                             resources["железная руда"] += 1
+                            self.stock -= 1
                         elif self.metal == "G":
                             resources["золотая руда"] += 1
+                            self.stock -= 1
+                        self.stock -= 1 + p.strength // 2 + max(p.strength, 2) % 2
                     elif self.state == "станция по добыче торфа":
                         resources["торф"] += 1 + p.strength // 2 + max(p.strength, 2) % 2
+                        self.stock -= 1 + p.strength // 2 + max(p.strength, 2) % 2
                     elif self.state == "исследовательский дом":
-                        resources["исследования"] += 1 + p.scince // 2 + max(p.scince, 2) % 2
+                        self.stock -= 1 + p.scince // 2 + max(p.scince, 2) % 2
+                        1 + p.scince // 2 + max(p.scince, 2) % 2
                     elif self.state == "кузница":
                         if self.task:
                             need_res = forge[self.task[0]]
@@ -177,6 +209,9 @@ class Cell(pygame.sprite.Sprite):
                                 resources[self.task[0]] += 1
                                 del self.task[0]
                                 print("end")
+                    if self.stock < 1:
+                        self.state = "луг"
+                        self.image = Cell.image[self.image]
                     break
             for t in range(len(self.timer)):
                 self.timer[t][0] -= 1
@@ -186,6 +221,8 @@ class Cell(pygame.sprite.Sprite):
                     b[self.rx] = self.all_b_l[self.timer[t][1]]
                     text_map[self.ry] = b
                     self.image = Cell.image[self.state]
+                    if self.state == "дом":
+                        places[0] += 3
                     del self.timer[t]
         elif type_ev == "dsel":
             self.selected = 0
@@ -194,6 +231,7 @@ class Cell(pygame.sprite.Sprite):
                 inf_window[0], inf_window[1] = information_menu(name=self.state,
                                                                 position=(self.rect.x, self.rect.y), )
         elif type_ev == "forge" and self.state == "кузница" and self.selected == 1:
+            print(0)
             for f in range(forge_task[1]):
                 self.task.append(list(forge)[forge_task[0]])
         elif type_ev == "update_fuel":
@@ -203,7 +241,9 @@ class Cell(pygame.sprite.Sprite):
                 else:
                     self.fuel = "брёвна"
                 inf_window[0], inf_window[1] = forge_menu(forge, fuel=self.fuel)
-
+        elif type_ev == "landing":
+            if self.state == "площадка для дирижабля":
+                landing_pos[0], landing_pos[1] = self.rect.x, self.rect.y
 
 
 
@@ -234,6 +274,7 @@ class Person(pygame.sprite.Sprite):
         self.science = characteristics["ум"]
         self.craft = characteristics["ремесло"]
         self.strength = characteristics["сила"]
+        self.name = characteristics["имя"]
 
         all_cell.update(type_ev="fog", ev_pos=(self.rect.x - 27, self.rect.y - 17), vision=self.vision)
 
@@ -269,7 +310,7 @@ class Person(pygame.sprite.Sprite):
                 if game_mode[0] == "Information":
                     self.selected = 1
                     game_mode[1] = 1
-                    inf_window[0], inf_window[1] = information_menu(name="Человек", position=(self.rect.x, self.rect.y),
+                    inf_window[0], inf_window[1] = information_menu(name=self.name, position=(self.rect.x, self.rect.y),
                                                                     выносливость=self.endurance, сила=self.strength,
                                                                     зрение=self.vision,
                                                                     ремесло=self.craft, ум=self.science,
@@ -303,7 +344,7 @@ class Person(pygame.sprite.Sprite):
             self.selected = 0
         elif type_ev == "update_inf":
             if self.selected == 1:
-                inf_window[0], inf_window[1] = information_menu(name="Человек", position=(self.rect.x, self.rect.y),
+                inf_window[0], inf_window[1] = information_menu(name=self.name, position=(self.rect.x, self.rect.y),
                                                                 выносливость=self.endurance, сила=self.strength,
                                                                 зрение=self.vision,
                                                                 ремесло=self.craft, ум=self.science,
@@ -311,8 +352,6 @@ class Person(pygame.sprite.Sprite):
                                                                 настроение=str(self.mood * 20) + "%",
                                                                 сытость=self.saturation,
                                                                 действия=self.actions)
-
-
 
 
 
@@ -428,6 +467,30 @@ class DateInterface(pygame.sprite.Sprite):
 
 
 
+class Trader(pygame.sprite.Sprite):
+    def __init__(self, *group, x_pos=0, y_pos=0):
+        super().__init__(*group)
+        self.image = pygame.image.load("pic\\дирижабль.png")
+        self.rect = self.image.get_rect()
+        colorkey = self.image.get_at((0, 0))
+        self.image.set_colorkey(colorkey)
+        self.rect.x = x_pos
+        self.rect.y = y_pos
+    def update(self, *args, type_ev="", pos=(0, 0)):
+        if type_ev == "trade":
+            if game_mode[0] != "Trade":
+                game_mode[0] = "Trade"
+                inf_window[0], inf_window[1] = trade_menu(resources, trade)
+            else:
+                game_mode[0] = "None"
+        elif type_ev == "spawn":
+            print(pos)
+            print(is_trader)
+            self.rect.x, self.rect.y = pos
+
+
+
+
 def world_generation(size):
     stop = 1
     text_map_func = []
@@ -489,7 +552,8 @@ def world_generation(size):
             "настроение": 5,
             "ремесло": random.randint(1, 3),
             "сила": random.randint(1, 3),
-            "ум": random.randint(0, 3)
+            "ум": random.randint(0, 3),
+            "имя": name_generation()
         }
         Person(all_person, characteristics=char, pos_y=117 + p * 100)
     Bolder(all_inter)
@@ -498,6 +562,7 @@ def world_generation(size):
     GameButton(all_inter, state="строительство", pos_x=1100, pos_y=200)
     GameButton(all_inter, state="ресурсы", pos_x=1100, pos_y=300)
     DateInterface(all_inter, state="1")
+    Trader(all_trader)
 
     for i in text_map_func:
         print("".join(i))
@@ -583,7 +648,7 @@ def resources_menu(inf):
 
 
 def forge_menu(inf, fuel="брёвна"):
-    window_x = 300
+    window_x = 600
     window_y = (len(inf) + 2) * 40
     position_x = 0
     position_y = 100
@@ -601,6 +666,34 @@ def forge_menu(inf, fuel="брёвна"):
         res_line = el + ": " + str(forge[el][0]) + " " + forge[el][1]
         new_screen.append(font.render(res_line, True, (0, 0, 0)))
         pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
+    return new_screen, pos_new_screen
+
+
+def trade_menu(inf, trade_d):
+    window_x = 600
+    window_y = (len(trade_d) + 3) * 40
+    position_x = 0
+    position_y = 100
+    font = pygame.font.SysFont(None, 20)
+    pos_new_screen = [(position_x, position_y), [position_x + 10, position_y + 50],
+                      (position_x + 10, position_y + 10)]
+    new_screen = [pygame.Surface((window_x, window_y)), pygame.Surface((280, 20)),
+                  font.render("Торговля", True, (0, 0, 0))]
+    pygame.draw.rect(new_screen[0], (139, 139, 139), (0, 0, window_x, window_y))
+    pygame.draw.rect(new_screen[0], (57, 57, 57), (0, 0, window_x, window_y), 5)
+    pygame.draw.rect(new_screen[1], (255, 255, 255), (0, 0, 280, 20))
+    rect_of_choice[0] = pos_new_screen[1][1]
+    # bahnschrift semibold
+    for el in inf:
+        if inf[el] != 0 and el in trade_d:
+            new_screen.append(font.render(str(el) + ":   " + str(trade_d[el]), True, (0, 0, 0)))
+            pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
+    for el in trade_d:
+        new_screen.append(font.render(str(el) + ":   " + str(trade_d[el]), True, (0, 0, 0)))
+        if pos_new_screen[-1][0] < 100:
+            pos_new_screen.append((pos_new_screen[-1][0] + 300, 150))
+        else:
+            pos_new_screen.append((pos_new_screen[-1][0], pos_new_screen[-1][1] + 40))
     return new_screen, pos_new_screen
 
 
@@ -647,7 +740,9 @@ if __name__ == '__main__':
     all_cell = pygame.sprite.Group()
     all_person = pygame.sprite.Group()
     all_inter = pygame.sprite.Group()
+    all_trader = pygame.sprite.Group()
     text_map, text_metal = world_generation(max_pos[0])
+    timer = 37
     turn = 1
     date = [1, 1, 1834]
     all_inter.update()
@@ -676,12 +771,22 @@ if __name__ == '__main__':
                         all_person.update(type_ev="left")
                         real_coord[0] -= 1
                 if event.key == pygame.K_SPACE:
-                    if game_mode[0] != "Forge":
+                    if game_mode[0] != "Forge" or "Building":
                         if turn < 4:
                             turn += 1
                         else:
                             all_cell.update(type_ev="next_day")
                             all_person.update(type_ev="next_day")
+                            timer += 1
+                            if is_trader[0]:
+                                is_trader[0] = 0
+                            if timer % 60 == 0 and timer > 59:
+                                all_cell.update(type_ev="landing")
+                                if landing_pos != [-1, -1]:
+                                    is_trader[0] = 1
+                                    all_trader.update(type_ev="spawn", pos=(landing_pos[0], landing_pos[1]))
+                                    print(landing_pos)
+
                             turn = 1
                             if date[0] < 30:
                                 date[0] += 1
@@ -709,6 +814,9 @@ if __name__ == '__main__':
                     all_inter.update(type_ev="building")
                 if event.key == pygame.K_r:
                     all_inter.update(type_ev="resources")
+                if event.key == pygame.K_t:
+                    if is_trader[0]:
+                        all_trader.update(type_ev="trade")
                 if game_mode == ["Building", 1] or game_mode[0] == "Forge":
                     max_len = len(inf_window[0]) - 3
                     if event.key == pygame.K_DOWN:
@@ -730,10 +838,70 @@ if __name__ == '__main__':
                                                 forge_task=[(window_pos[1][1] - rect_of_choice[0]) // 40,
                                                             int("".join(num_text))])
                         game_mode = ["None", 0]
+                if game_mode[0] == "Trade":
+                    max_len_t = len(trade)
+                    max_len_r = 0
+                    for i in resources:
+                        if resources[i] != 0:
+                            if i in trade:
+                                max_len_r += 1
+                    if window_pos:
+                        if window_pos[1][0] < 300:
+                            max_len = max_len_r
+                        else:
+                            max_len = max_len_t
+                    if event.key == pygame.K_DOWN:
+                        if window_pos[1][1] + 40 < rect_of_choice[0] + max_len * 40:
+                            window_pos[1][1] += 40
+                        else:
+                            window_pos[1][1] -= (max_len - 1) * 40
+                    if event.key == pygame.K_UP:
+                        if window_pos[1][1] - 40 >= rect_of_choice[0]:
+                            window_pos[1][1] -= 40
+                        else:
+                            window_pos[1][1] += (max_len - 1) * 40
+                    if event.key == pygame.K_RIGHT:
+                        if window_pos[1][0] < 300:
+                            window_pos[1][0] += 300
+                            window_pos[1][1] = rect_of_choice[0]
+                        else:
+                            window_pos[1][0] -= 300
+                            window_pos[1][1] = rect_of_choice[0]
+                    if event.key == pygame.K_RETURN:
+                        if window_pos[1][0] < 300:
+                            if num_text:
+                                res_to_trade = []
+                                for r in resources:
+                                    if resources[r] > 0 and r in trade:
+                                        res_to_trade.append(r)
+                                th = (window_pos[1][1] - rect_of_choice[0]) // 40
+                                trade_f[res_to_trade[th]] = int("".join(num_text)) * trade[res_to_trade[th]]
+                        else:
+                            if num_text:
+                                th = (window_pos[1][1] - rect_of_choice[0]) // 40
+                                trade_s[list(trade)[th]] = int("".join(num_text)) * trade[list(trade)[th]]
+                    if event.key == pygame.K_g:
+                        if trade_f:
+                            if trade_s:
+                                sum_d = 0
+                                for td in trade_f:
+                                    sum_d += trade_f[td]
+                                for td in trade_s:
+                                    sum_d -= trade_s[td]
+                                if sum_d >= 0:
+                                    for td in trade_f:
+                                        resources[td] -= trade_f[td] // trade[td]
+                                    for td in trade_s:
+                                        resources[td] += trade_s[td] // trade[td]
+                                    trade_f = {}
+                                    trade_s = {}
+
                 if game_mode[0] == "Forge":
                     number_input(event.key)
                     if event.key == pygame.K_f:
                         all_cell.update(type_ev="update_fuel")
+                if game_mode[0] == "Trade":
+                    number_input(event.key)
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 all_person.update(type_ev="click")
@@ -744,10 +912,11 @@ if __name__ == '__main__':
 
 
         # отрисовка и изменение свойств объектов
-        # ...
         all_cell.draw(screen)
         all_person.draw(screen)
         all_inter.draw(screen)
+        if is_trader[0] == 1:
+            all_trader.draw(screen)
         if game_mode == ["Information", 1]:
             window, window_pos = inf_window[0], inf_window[1]
             j = 0
@@ -775,7 +944,30 @@ if __name__ == '__main__':
             num_x, num_y = window_pos[-1][0], window_pos[-1][1] + 40
             if nums:
                 screen.blit(nums[0], (num_x, num_y))
+        elif game_mode[0] == "Trade":
+            window, window_pos = inf_window[0], inf_window[1]
+            j = 0
+            for i in window:
+                screen.blit(i, window_pos[j])
+                j += 1
+            num_x, num_y = window_pos[-1][0], window_pos[-1][1] + 40
+            if nums:
+                if nums:
+                    screen.blit(nums[0], (num_x - 300, num_y))
+                    screen.blit(nums[0], (num_x, num_y))
+            font_for_sum = pygame.font.SysFont(None, 20)
+            if trade_f:
+                sum_d = 0
+                for td in trade_f:
+                    sum_d += trade_f[td]
 
+                screen.blit(font_for_sum.render(str(sum_d), True, (0, 0, 0)), (num_x - 300, num_y + 40))
+            if trade_s:
+                sum_d = 0
+                for td in trade_s:
+                    sum_d += trade_s[td]
+
+                screen.blit(font_for_sum.render(str(sum_d), True, (0, 0, 0)), (num_x, num_y + 40))
 
         screen.blit(date_pic[0], (1071, 20))
         # обновление экрана
