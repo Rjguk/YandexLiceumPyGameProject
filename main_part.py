@@ -8,7 +8,7 @@ from name_generator import name_generation
 
 
 real_coord = [0, 0]
-max_pos = [250, 250]
+max_pos = [50, 50]
 game_mode = ["None", 0]
 person_positions = []
 rect_of_choice = [0]
@@ -22,20 +22,21 @@ window_pos = []
 places = [0]
 is_trader = [0]
 landing_pos = [-1, -1]
+population = [0]
 
-resources = {"брёвна" : 1000,
-             "торф" : 1000,
-             "камни" : 600,
-             "железная руда": 1000,
+resources = {"брёвна" : 100,
+             "торф" : 0,
+             "камни" : 100,
+             "железная руда": 0,
              "железный слиток": 0,
-             "золотая руда": 1000,
+             "золотая руда": 0,
              "золотой слиток": 0,
              "золотое изделие": 0,
              "золотая бижутерия": 0,
              "ружьё": 0,
              "еда": 2000,
              "инструменты": 30,
-             "науч. оборуд.": 100,
+             "науч. оборуд.": 0,
              "исследования" : 1,}
 
 build = [["Дом (позволяет поселить в нём трёх человек)", {"брёвна": 25, "камни": 10}],
@@ -276,6 +277,7 @@ class Person(pygame.sprite.Sprite):
         self.craft = characteristics["ремесло"]
         self.strength = characteristics["сила"]
         self.name = characteristics["имя"]
+        population[0] += 1
 
         all_cell.update(type_ev="fog", ev_pos=(self.rect.x - 27, self.rect.y - 17), vision=self.vision)
 
@@ -340,6 +342,8 @@ class Person(pygame.sprite.Sprite):
             else:
                 self.saturation -= 2
             if self.saturation < 1:
+                population[0] -= 1
+                end()
                 self.kill()
         elif type_ev == "next_turn":
             self.actions = max(0, self.endurance - (2 - (self.saturation + 1) // 5))
@@ -491,6 +495,28 @@ class Trader(pygame.sprite.Sprite):
             print(is_trader)
             self.rect.x, self.rect.y = pos
 
+
+
+class MenuButton(pygame.sprite.Sprite):
+    """
+        МЕНЮ НЕДОДЕЛАНО
+    """
+    image = {"выйти из игры": pygame.image.load("pic\\выйти_кнопка.png"),
+             "вернуться в игру": pygame.image.load("pic\\вернуться_кнопка.png"),
+             "выйти в меню": pygame.image.load("pic\\меню_кнопка.png"),
+             "начать игру": pygame.image.load("pic\\начать_кнопка.png"),
+             "пустая": pygame.image.load("pic\\пустая_кнопка.png"),
+             }
+    def __init__(self, *group, state="информация", pos_x=1100, pos_y=100):
+        super().__init__(*group)
+        self.state = state
+        self.image = MenuButton.image[self.state]
+        self.rect = self.image.get_rect()
+        self.rect.x = pos_x
+        self.rect.y = pos_y
+
+    def update(self, type_ev=""):
+        pass
 
 
 
@@ -732,6 +758,11 @@ def number_input(key=None):
     else:
         nums.append(font.render("".join(num_text), True, (0, 0, 0)))
 
+
+def end():
+    if population[0] == 0:
+        game_mode[0] = "END"
+
 if __name__ == '__main__':
     pygame.init()
     size = width, height = 1200, 900
@@ -756,7 +787,7 @@ if __name__ == '__main__':
     running = True
     while running:
         for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN:
+            if event.type == pygame.KEYDOWN and game_mode[0] != "END":
                 if event.key == pygame.K_w:
                     if real_coord[1] + height // CELL_LEN - 1 < max_pos[1]:
                         all_cell.update(type_ev="up")
@@ -931,7 +962,7 @@ if __name__ == '__main__':
                 if game_mode[0] == "Trade":
                     number_input(event.key)
 
-            if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.type == pygame.MOUSEBUTTONDOWN and game_mode[0] != "END":
                 all_person.update(type_ev="click")
                 all_cell.update(type_ev="click")
                 all_inter.update(type_ev="click")
@@ -995,7 +1026,11 @@ if __name__ == '__main__':
                     sum_d += trade_s[td]
 
                 screen.blit(font_for_sum.render(str(sum_d), True, (0, 0, 0)), (num_x, num_y + INDENTATION))
-
+        elif game_mode[0] == "END":
+            font = pygame.font.SysFont("times new roman", 40)
+            screen.blit(font.render("Поселение погибло", True, (0, 0, 0)), (400, 450))
+            screen.blit(font.render("Ваш счёт: " + str(resources["исследования"]), True, (0, 0, 0)), (400, 500))
+            pygame.display.flip()
         screen.blit(date_pic[0], (1071, 20))
         # обновление экрана
         pygame.display.flip()
